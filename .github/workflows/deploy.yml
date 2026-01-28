@@ -1,12 +1,9 @@
 name: Build and Deploy
 
 on:
-push:
-   branches: [ main ]
-   paths: [ 'src/**' ]
-pull_request:
-   branches: [ '*' ]
-workflow_dispatch:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
 
 
 env:

@@ -1,0 +1,20 @@
+# ============================================================================
+# azure.yaml - Azure Developer CLI Project Configuration
+# Defines the project structure and resource deployment mapping
+# ============================================================================
+
+name: zavastore-infra
+metadata:
+  description: ZavaStorefront application infrastructure on Azure
+  author: Zava Development Team
+  version: 1.0.0
+
+# Project type
+projectType: infra
+
+# Infrastructure as Code configuration
+infra:
+  # Bicep template path
+  path: infra
+  # Module to deploy (main template)
+  module: main

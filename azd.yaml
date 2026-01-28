@@ -1,0 +1,75 @@
+# ============================================================================
+# azd.yaml - Azure Developer CLI Workflow Configuration
+# Defines provisioning and deployment workflow steps
+# ============================================================================
+
+version: "1.0"
+
+# Project metadata
+metadata:
+  template: zavastore@0.1.0
+  description: "ZavaStorefront e-commerce application with AI capabilities"
+
+# Environment variables that will be set during deployment
+env:
+  # Deployment configuration
+  AZURE_ENV_NAME: dev
+  AZURE_LOCATION: westus3
+  AZURE_RESOURCE_GROUP: rg-zavastore-dev-westus3
+  PROJECT_NAME: zavastore
+  
+  # Container configuration
+  CONTAINER_IMAGE_NAME: zava-storefront
+  CONTAINER_IMAGE_TAG: latest
+  CONTAINER_PORT: "5000"
+  
+  # App Service configuration
+  APP_SERVICE_PLAN_TIER: Basic
+  APP_SERVICE_PLAN_SIZE: B1
+  
+  # ACR configuration
+  ACR_SKU: Standard
+  
+  # Feature flags
+  ENABLE_APP_INSIGHTS: "true"
+  ENABLE_KEY_VAULT: "true"
+  ENABLE_MICROSOFT_FOUNDRY: "true"
+
+# Provisioning workflow - creates Azure resources
+provision:
+  # Primary provisioning flow using Bicep
+  - bicep deploy --template-file infra/main.bicep --parameters location=${AZURE_LOCATION} environment=${AZURE_ENV_NAME} projectName=${PROJECT_NAME} acrSku=${ACR_SKU} appServicePlanTier=${APP_SERVICE_PLAN_TIER} appServicePlanSize=${APP_SERVICE_PLAN_SIZE} containerPort=${CONTAINER_PORT} containerImageName=${CONTAINER_IMAGE_NAME} containerImageTag=${CONTAINER_IMAGE_TAG} enableAppInsights=${ENABLE_APP_INSIGHTS} enableKeyVault=${ENABLE_KEY_VAULT} enableMicrosoftFoundry=${ENABLE_MICROSOFT_FOUNDRY}
+
+# Deployment workflow - deploys application to Azure resources
+deploy:
+  # Step 1: Build Docker image and push to ACR
+  # Using cloud-based Azure Container Registry build (no local Docker required)
+  - steps:
+    - bicep deploy # Ensures latest infrastructure is ready
+    - sh: echo "Building and pushing Docker image to ACR..."
+    - sh: az acr build --registry ${ACR_NAME} --image ${CONTAINER_IMAGE_NAME}:${CONTAINER_IMAGE_TAG} --file Dockerfile src/
+    
+  # Step 2: Update App Service with new image
+  - steps:
+    - sh: echo "Deploying image to App Service..."
+    - sh: az webapp config container set --name ${WEB_APP_NAME} --resource-group ${AZURE_RESOURCE_GROUP} --docker-custom-image-name ${ACR_LOGIN_SERVER}/${CONTAINER_IMAGE_NAME}:${CONTAINER_IMAGE_TAG} --docker-registry-server-url https://${ACR_LOGIN_SERVER} --docker-registry-server-username "" --docker-registry-server-password ""
+
+# Hooks for custom scripts
+hooks:
+  # Pre-provisioning hook - validate requirements
+  preProvision:
+    - sh: echo "Validating Azure prerequisites..."
+    - sh: az account show
+  
+  # Post-provisioning hook - configure deployed resources
+  postProvision:
+    - sh: echo "Provisioning complete. Resources created in westus3"
+  
+  # Pre-deployment hook
+  preDeploy:
+    - sh: echo "Preparing to deploy application..."
+  
+  # Post-deployment hook - validation
+  postDeploy:
+    - sh: echo "Deployment complete. Testing application health..."
+    - sh: curl -s ${WEB_APP_URL}/health || echo "Health check failed"

@@ -1,0 +1,47 @@
+name: Build and Deploy
+
+on:
+push:
+   branches: [ main ]
+   paths: [ 'src/**' ]
+pull_request:
+   branches: [ '*' ]
+workflow_dispatch:
+
+
+env:
+  REGISTRY: acrzavastore53xc4kg64odyq.azurecr.io
+  IMAGE_NAME: zava-storefront
+  APP_SERVICE: app-zavastore-dev-53xc4kg64odyq
+  RESOURCE_GROUP: zava-dev
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Login to Azure Container Registry
+      uses: azure/docker-login@v1
+      with:
+        login-server: ${{ env.REGISTRY }}
+        username: ${{ secrets.ACR_USERNAME }}
+        password: ${{ secrets.ACR_PASSWORD }}
+    
+    - name: Build and push image
+      run: |
+        docker build -f src/Dockerfile -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest src/
+        docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+        docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+    
+    - name: Login to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: Deploy to App Service
+      uses: azure/webapps-deploy@v2
+      with:
+        app-name: ${{ env.APP_SERVICE }}
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}

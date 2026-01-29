@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - develop
     paths:
       - 'src/**'
       - 'Dockerfile'
@@ -12,7 +11,6 @@ on:
   pull_request:
     branches:
       - main
-      - develop
     paths:
       - 'src/**'
       - 'Dockerfile'
@@ -22,15 +20,19 @@ env:
   AZURE_LOCATION: westus3
   AZURE_ENV_NAME: dev
   CONTAINER_IMAGE_NAME: zava-storefront
-  CONTAINER_IMAGE_TAG: ${{ github.sha }}
+  RESOURCE_GROUP: zava-dev
+
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     
-    permissions:
-      contents: read
-      id-token: write
+    outputs:
+      image-tag: ${{ github.sha }}
+      registry-name: ${{ steps.acr.outputs.acr_name }}
     
     steps:
       - name: Checkout code
@@ -49,28 +51,31 @@ jobs:
         id: acr
         run: |
           acr_name=$(az resource list \
-            --resource-group rg-zavastore-dev-westus3 \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
             --resource-type Microsoft.ContainerRegistry/registries \
             --query "[0].name" -o tsv)
           echo "acr_name=$acr_name" >> $GITHUB_OUTPUT
-          echo "ACR Name: $acr_name"
+          echo "✓ ACR Name: $acr_name"
       
       # Build and push image to ACR using cloud-based build
+      # This eliminates the need for Docker to be installed locally
       - name: Build and push image to ACR
         run: |
+          echo "Building image: ${{ env.CONTAINER_IMAGE_NAME }}:${{ github.sha }}"
           az acr build \
             --registry ${{ steps.acr.outputs.acr_name }} \
-            --image ${{ env.CONTAINER_IMAGE_NAME }}:${{ env.CONTAINER_IMAGE_TAG }} \
+            --image ${{ env.CONTAINER_IMAGE_NAME }}:${{ github.sha }} \
             --image ${{ env.CONTAINER_IMAGE_NAME }}:latest \
             --file Dockerfile \
-            src/
+            .
+          echo "✓ Image pushed successfully to ${{ steps.acr.outputs.acr_name }}.azurecr.io"
       
       # Output image information for deployment
       - name: Output image details
         run: |
-          echo "Image pushed successfully"
           echo "Registry: ${{ steps.acr.outputs.acr_name }}.azurecr.io"
-          echo "Image: ${{ env.CONTAINER_IMAGE_NAME }}:${{ env.CONTAINER_IMAGE_TAG }}"
+          echo "Image: ${{ env.CONTAINER_IMAGE_NAME }}:${{ github.sha }}"
+          echo "Latest Tag: ${{ env.CONTAINER_IMAGE_NAME }}:latest"
 
   notify:
     runs-on: ubuntu-latest
@@ -80,9 +85,12 @@ jobs:
     steps:
       - name: Notify - Build succeeded
         if: needs.build-and-push.result == 'success'
-        run: echo "✅ Docker image built and pushed to ACR successfully"
+        run: |
+          echo "✅ Build succeeded"
+          echo "Image built: ${{ needs.build-and-push.outputs.registry-name }}.azurecr.io/${{ env.CONTAINER_IMAGE_NAME }}:${{ needs.build-and-push.outputs.image-tag }}"
       
       - name: Notify - Build failed
         if: needs.build-and-push.result == 'failure'
-        run: echo "❌ Docker image build failed"
-        continue-on-error: true
+        run: |
+          echo "❌ Build failed - Check workflow logs for details"
+          exit 1

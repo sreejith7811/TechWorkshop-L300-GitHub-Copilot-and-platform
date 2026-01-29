@@ -9,15 +9,15 @@ FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
 
 WORKDIR /build
 
-# Copy project files
-COPY ZavaStorefront.csproj .
-COPY *.sln .
+# Copy project files from src directory
+COPY src/ZavaStorefront.csproj .
+COPY src/*.sln .
 
 # Restore dependencies
-RUN dotnet restore
+RUN dotnet restore ZavaStorefront.csproj
 
 # Copy application source code
-COPY . .
+COPY src/ .
 
 # Build the application
 RUN dotnet build -c Release -o /build/output
